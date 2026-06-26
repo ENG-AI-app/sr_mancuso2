@@ -3,6 +3,7 @@ const SUPABASE_KEY = "sb_publishable_Tat9TUjV-ALTJoL8RoT31Q_OKuLQZUx";
 const COMMENTS_TABLE = "comentarios_del_juego";
 const ADMIN_EMAIL = "ailenengelberger@gmail.com";
 const SITE_URL = "https://eng-ai-app.github.io/sr_mancuso2/";
+const LIKED_COMMENTS_KEY = "srMancusoLikedComments";
 
 const gameCards = document.querySelectorAll("[data-game]");
 const authClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -10,6 +11,22 @@ let currentSession = null;
 
 const isAdmin = () =>
   currentSession?.user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
+const getLikedComments = () => {
+  try {
+    return JSON.parse(localStorage.getItem(LIKED_COMMENTS_KEY)) || [];
+  } catch {
+    return [];
+  }
+};
+
+const saveLikedComment = (commentId) => {
+  const likedComments = new Set(getLikedComments());
+  likedComments.add(commentId);
+  localStorage.setItem(LIKED_COMMENTS_KEY, JSON.stringify([...likedComments]));
+};
+
+const hasLikedComment = (commentId) => getLikedComments().includes(commentId);
 
 const supabaseRequest = async (path, options = {}) => {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -92,14 +109,31 @@ const renderComments = (card, commentsByGame) => {
     date.dateTime = comment.created_at;
     date.textContent = formatDate(comment.created_at);
 
-    meta.append(date);
+    const actions = document.createElement("div");
+    actions.className = "comment-actions";
+
+    const likeButton = document.createElement("button");
+    likeButton.type = "button";
+    likeButton.className = "like-button";
+    likeButton.textContent = `Me gusta (${comment.likes || 0})`;
+
+    if (hasLikedComment(comment.id)) {
+      likeButton.classList.add("is-liked");
+      likeButton.disabled = true;
+      likeButton.textContent = `Te gusta (${comment.likes || 0})`;
+    }
+
+    likeButton.addEventListener("click", () => likeComment(comment));
+    actions.append(likeButton);
+
+    meta.append(date, actions);
 
     if (isAdmin()) {
       const deleteButton = document.createElement("button");
       deleteButton.type = "button";
       deleteButton.textContent = "Borrar";
       deleteButton.addEventListener("click", () => deleteComment(comment.id));
-      meta.append(deleteButton);
+      actions.append(deleteButton);
     }
 
     item.append(author, text, meta);
@@ -130,7 +164,7 @@ const loadComments = async () => {
 
   try {
     const comments = await supabaseRequest(
-      `${COMMENTS_TABLE}?select=id,juego,nombre,comentario,created_at&order=created_at.desc`,
+      `${COMMENTS_TABLE}?select=id,juego,nombre,comentario,likes,created_at&order=created_at.desc`,
     );
     const commentsByGame = groupCommentsByGame(comments);
 
@@ -249,6 +283,29 @@ const deleteComment = async (commentId) => {
   } catch (error) {
     console.error(error);
     alert(`No se pudo borrar el comentario: ${error.message}`);
+  }
+};
+
+const likeComment = async (comment) => {
+  if (hasLikedComment(comment.id)) {
+    return;
+  }
+
+  try {
+    saveLikedComment(comment.id);
+    await supabaseRequest(`${COMMENTS_TABLE}?id=eq.${comment.id}`, {
+      method: "PATCH",
+      headers: {
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        likes: (comment.likes || 0) + 1,
+      }),
+    });
+    await loadComments();
+  } catch (error) {
+    console.error(error);
+    alert(`No se pudo sumar el me gusta: ${error.message}`);
   }
 };
 

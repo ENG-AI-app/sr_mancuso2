@@ -410,10 +410,29 @@ h2 {
   font-size: 0.78rem;
 }
 
+.comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .comment-meta button {
   padding: 6px 9px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--muted);
+}
+
+.comment-meta .like-button {
+  border: 1px solid rgba(244, 200, 74, 0.38);
+  background: rgba(244, 200, 74, 0.1);
+  color: #fff7cf;
+}
+
+.comment-meta .like-button.is-liked {
+  cursor: default;
+  opacity: 0.78;
 }
 
 .comment-meta button:hover,
