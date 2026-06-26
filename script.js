@@ -96,7 +96,7 @@ const buildCommentTree = (comments) => {
     rootComments.push(comment);
   });
 
-  rootComments.forEach((comment) => {
+  commentsById.forEach((comment) => {
     comment.replies.sort(
       (firstReply, secondReply) =>
         new Date(firstReply.created_at) - new Date(secondReply.created_at),
@@ -186,9 +186,10 @@ const createReplyForm = (card, parentComment) => {
   return form;
 };
 
-const renderCommentItem = (card, comment) => {
+const renderCommentItem = (card, comment, depth = 0) => {
   const item = document.createElement("article");
   item.className = comment.parent_id ? "comment-item reply-item" : "comment-item";
+  item.style.setProperty("--reply-depth", Math.min(depth, 3));
 
   const author = document.createElement("strong");
   author.className = "comment-author";
@@ -222,12 +223,10 @@ const renderCommentItem = (card, comment) => {
   likeButton.addEventListener("click", () => likeComment(comment));
   actions.append(likeButton);
 
-  if (!comment.parent_id) {
-    const replyButton = document.createElement("button");
-    replyButton.type = "button";
-    replyButton.textContent = "Responder";
-    actions.append(replyButton);
-  }
+  const replyButton = document.createElement("button");
+  replyButton.type = "button";
+  replyButton.textContent = "Responder";
+  actions.append(replyButton);
 
   meta.append(date, actions);
 
@@ -241,22 +240,19 @@ const renderCommentItem = (card, comment) => {
 
   item.append(author, text, meta);
 
-  if (!comment.parent_id) {
-    const replyForm = createReplyForm(card, comment);
-    const replyButton = actions.querySelector("button:nth-child(2)");
-    replyButton.addEventListener("click", () => {
-      replyForm.hidden = !replyForm.hidden;
-    });
-    item.append(replyForm);
+  const replyForm = createReplyForm(card, comment);
+  replyButton.addEventListener("click", () => {
+    replyForm.hidden = !replyForm.hidden;
+  });
+  item.append(replyForm);
 
-    if (comment.replies.length > 0) {
-      const repliesList = document.createElement("div");
-      repliesList.className = "replies-list";
-      comment.replies.forEach((reply) => {
-        repliesList.append(renderCommentItem(card, reply));
-      });
-      item.append(repliesList);
-    }
+  if (comment.replies.length > 0) {
+    const repliesList = document.createElement("div");
+    repliesList.className = "replies-list";
+    comment.replies.forEach((reply) => {
+      repliesList.append(renderCommentItem(card, reply, depth + 1));
+    });
+    item.append(repliesList);
   }
 
   return item;
