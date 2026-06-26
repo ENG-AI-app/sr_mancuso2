@@ -496,6 +496,40 @@ const setupCommentForms = () => {
   });
 };
 
+const setupShareButton = () => {
+  const shareButton = document.querySelector("[data-share-page]");
+
+  if (!shareButton) {
+    return;
+  }
+
+  shareButton.addEventListener("click", async () => {
+    const shareUrl = SITE_URL;
+    const shareData = {
+      title: "SR_MANCUSO",
+      text: "Mira la pagina de SR_MANCUSO.",
+      url: shareUrl,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+
+      await navigator.clipboard.writeText(shareUrl);
+      shareButton.textContent = "Link copiado";
+      setTimeout(() => {
+        shareButton.textContent = "Compartir pagina";
+      }, 1800);
+    } catch (error) {
+      console.error(error);
+      alert("No se pudo compartir la pagina.");
+    }
+  });
+};
+
 setupCommentForms();
 setupAdminControls();
+setupShareButton();
 initializeAuth();
