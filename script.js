@@ -2,6 +2,7 @@ const SUPABASE_URL = "https://eoihzwjlrjlwpdgkaifc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_Tat9TUjV-ALTJoL8RoT31Q_OKuLQZUx";
 const COMMENTS_TABLE = "comentarios_del_juego";
 const ADMIN_EMAIL = "ailenengelberger@gmail.com";
+const SITE_URL = "https://eng-ai-app.github.io/sr_mancuso2/";
 
 const gameCards = document.querySelectorAll("[data-game]");
 const authClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -184,7 +185,7 @@ const setupAdminControls = () => {
     const { error } = await authClient.auth.signInWithOtp({
       email: ADMIN_EMAIL,
       options: {
-        emailRedirectTo: window.location.href.split("#")[0],
+        emailRedirectTo: SITE_URL,
       },
     });
 
