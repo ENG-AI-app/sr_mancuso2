@@ -115,12 +115,13 @@ const renderComments = (card, commentsByGame) => {
     const likeButton = document.createElement("button");
     likeButton.type = "button";
     likeButton.className = "like-button";
-    likeButton.textContent = `Me gusta (${comment.likes || 0})`;
+    likeButton.setAttribute("aria-label", "Dar corazon al comentario");
+    likeButton.textContent = `♥ ${comment.likes || 0}`;
 
     if (hasLikedComment(comment.id)) {
       likeButton.classList.add("is-liked");
       likeButton.disabled = true;
-      likeButton.textContent = `Te gusta (${comment.likes || 0})`;
+      likeButton.setAttribute("aria-label", "Ya diste corazon a este comentario");
     }
 
     likeButton.addEventListener("click", () => likeComment(comment));
