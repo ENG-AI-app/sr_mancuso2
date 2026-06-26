@@ -1,15 +1,21 @@
 const SUPABASE_URL = "https://eoihzwjlrjlwpdgkaifc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_Tat9TUjV-ALTJoL8RoT31Q_OKuLQZUx";
 const COMMENTS_TABLE = "comentarios_del_juego";
+const ADMIN_EMAIL = "ailenengelberger@gmail.com";
 
 const gameCards = document.querySelectorAll("[data-game]");
+const authClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
+let currentSession = null;
+
+const isAdmin = () =>
+  currentSession?.user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
 const supabaseRequest = async (path, options = {}) => {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...options,
     headers: {
       apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
+      Authorization: `Bearer ${options.accessToken || SUPABASE_KEY}`,
       "Content-Type": "application/json",
       ...options.headers,
     },
@@ -86,6 +92,15 @@ const renderComments = (card, commentsByGame) => {
     date.textContent = formatDate(comment.created_at);
 
     meta.append(date);
+
+    if (isAdmin()) {
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.textContent = "Borrar";
+      deleteButton.addEventListener("click", () => deleteComment(comment.id));
+      meta.append(deleteButton);
+    }
+
     item.append(author, text, meta);
     commentsList.append(item);
   });
@@ -122,6 +137,117 @@ const loadComments = async () => {
   } catch (error) {
     console.error(error);
     renderErrorState("Revisa la consola del navegador.");
+  }
+};
+
+const updateAdminControls = () => {
+  const status = document.querySelector("[data-admin-status]");
+  const loginButton = document.querySelector("[data-admin-login]");
+  const logoutButton = document.querySelector("[data-admin-logout]");
+
+  if (!status || !loginButton || !logoutButton) {
+    return;
+  }
+
+  if (!authClient) {
+    status.textContent = "Admin no disponible";
+    loginButton.hidden = true;
+    logoutButton.hidden = true;
+    return;
+  }
+
+  if (isAdmin()) {
+    status.textContent = "Admin activo";
+    loginButton.hidden = true;
+    logoutButton.hidden = false;
+    return;
+  }
+
+  status.textContent = currentSession ? "No autorizado" : "Modo admin inactivo";
+  loginButton.hidden = false;
+  logoutButton.hidden = true;
+};
+
+const setupAdminControls = () => {
+  const loginButton = document.querySelector("[data-admin-login]");
+  const logoutButton = document.querySelector("[data-admin-logout]");
+
+  if (!authClient || !loginButton || !logoutButton) {
+    updateAdminControls();
+    return;
+  }
+
+  loginButton.addEventListener("click", async () => {
+    loginButton.disabled = true;
+    loginButton.textContent = "Enviando...";
+
+    const { error } = await authClient.auth.signInWithOtp({
+      email: ADMIN_EMAIL,
+      options: {
+        emailRedirectTo: window.location.href.split("#")[0],
+      },
+    });
+
+    loginButton.disabled = false;
+    loginButton.textContent = "Entrar admin";
+
+    if (error) {
+      alert(`No se pudo enviar el acceso admin: ${error.message}`);
+      return;
+    }
+
+    alert("Te envie un link de acceso al email admin.");
+  });
+
+  logoutButton.addEventListener("click", async () => {
+    await authClient.auth.signOut();
+  });
+};
+
+const initializeAuth = async () => {
+  if (!authClient) {
+    updateAdminControls();
+    await loadComments();
+    return;
+  }
+
+  const { data } = await authClient.auth.getSession();
+  currentSession = data.session;
+  updateAdminControls();
+
+  authClient.auth.onAuthStateChange((_event, session) => {
+    currentSession = session;
+    updateAdminControls();
+    loadComments();
+  });
+
+  await loadComments();
+};
+
+const deleteComment = async (commentId) => {
+  if (!isAdmin()) {
+    alert("Tenes que entrar como admin para borrar comentarios.");
+    return;
+  }
+
+  const shouldDelete = confirm("Borrar este comentario?");
+
+  if (!shouldDelete) {
+    return;
+  }
+
+  try {
+    await supabaseRequest(`${COMMENTS_TABLE}?id=eq.${commentId}`, {
+      method: "DELETE",
+      accessToken: currentSession.access_token,
+      headers: {
+        Prefer: "return=minimal",
+      },
+    });
+    await loadComments();
+  } catch (error) {
+    console.error(error);
+    alert(`No se pudo borrar el comentario: ${error.message}`);
   }
 };
 
@@ -172,4 +298,5 @@ const setupCommentForms = () => {
 };
 
 setupCommentForms();
-loadComments();
+setupAdminControls();
+initializeAuth();

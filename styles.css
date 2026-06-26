@@ -198,6 +198,33 @@ h1 {
   margin: 0 0 7px;
 }
 
+.admin-panel {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.admin-panel button {
+  min-height: 38px;
+  border: 1px solid rgba(244, 200, 74, 0.55);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: rgba(244, 200, 74, 0.1);
+  color: #fff7cf;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.admin-panel button:hover,
+.admin-panel button:focus-visible {
+  background: rgba(244, 200, 74, 0.18);
+  outline: none;
+}
+
 h2 {
   margin-bottom: 0;
   font-size: clamp(2rem, 4vw, 3.4rem);
@@ -504,6 +531,12 @@ h2 {
 
   .section-heading {
     display: block;
+  }
+
+  .admin-panel {
+    justify-content: flex-start;
+    margin-top: 14px;
+    flex-wrap: wrap;
   }
 }
 

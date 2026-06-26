@@ -86,8 +86,15 @@
 
       <section class="content-section" aria-labelledby="games-title">
         <div class="section-heading">
-          <p class="eyebrow">Jugando ultimamente</p>
-          <h2 id="games-title">Juegos destacados</h2>
+          <div>
+            <p class="eyebrow">Jugando ultimamente</p>
+            <h2 id="games-title">Juegos destacados</h2>
+          </div>
+          <div class="admin-panel" data-admin-panel>
+            <span data-admin-status>Modo admin inactivo</span>
+            <button type="button" data-admin-login>Entrar admin</button>
+            <button type="button" data-admin-logout hidden>Salir</button>
+          </div>
         </div>
 
         <div class="games-grid">
@@ -212,6 +219,7 @@
         </div>
       </section>
     </main>
-    <script src="script.js?v=8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="script.js?v=9"></script>
   </body>
 </html>
