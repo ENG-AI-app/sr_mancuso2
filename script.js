@@ -332,6 +332,38 @@ const loadProfile = async () => {
   );
 
   currentProfile = profiles[0] || null;
+
+  if (!currentProfile) {
+    const metadata = currentSession.user.user_metadata || {};
+    const publicName =
+      metadata.full_name ||
+      metadata.name ||
+      currentSession.user.email?.split("@")[0] ||
+      "Usuario";
+
+    await supabaseRequest("profiles", {
+      method: "POST",
+      accessToken: currentSession.access_token,
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify({
+        id: currentSession.user.id,
+        email: currentSession.user.email,
+        nombre_publico: publicName.slice(0, 32),
+      }),
+    });
+
+    const createdProfiles = await supabaseRequest(
+      `profiles?select=id,email,nombre_publico&id=eq.${currentSession.user.id}&limit=1`,
+      {
+        accessToken: currentSession.access_token,
+      },
+    );
+
+    currentProfile = createdProfiles[0] || null;
+  }
+
   return currentProfile;
 };
 
@@ -391,31 +423,23 @@ const setupUserControls = () => {
   }
 
   loginButton.addEventListener("click", async () => {
-    const email = prompt("Ingresa tu email para recibir el link de acceso:");
-
-    if (!email) {
-      return;
-    }
-
     loginButton.disabled = true;
-    loginButton.textContent = "Enviando...";
+    loginButton.textContent = "Entrando...";
 
-    const { error } = await authClient.auth.signInWithOtp({
-      email: email.trim(),
+    const { error } = await authClient.auth.signInWithOAuth({
+      provider: "google",
       options: {
-        emailRedirectTo: SITE_URL,
+        redirectTo: SITE_URL,
       },
     });
 
     loginButton.disabled = false;
-    loginButton.textContent = "Entrar";
+    loginButton.textContent = "Entrar con Google";
 
     if (error) {
-      alert(`No se pudo enviar el acceso: ${error.message}`);
+      alert(`No se pudo entrar con Google: ${error.message}`);
       return;
     }
-
-    alert("Te enviamos un link de acceso al email.");
   });
 
   logoutButton.addEventListener("click", async () => {
