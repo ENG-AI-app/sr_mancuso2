@@ -8,9 +8,13 @@ const LIKED_COMMENTS_KEY = "srMancusoLikedComments";
 const gameCards = document.querySelectorAll("[data-game]");
 const authClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
 let currentSession = null;
+let currentProfile = null;
 
 const isAdmin = () =>
   currentSession?.user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
+const canDeleteComment = (comment) =>
+  isAdmin() || (currentSession?.user?.id && comment.user_id === currentSession.user.id);
 
 const getLikedComments = () => {
   try {
@@ -106,15 +110,18 @@ const buildCommentTree = (comments) => {
   return rootComments;
 };
 
-const saveComment = ({ gameId, nameText, commentText, parentId = null }) =>
+const saveComment = ({ gameId, commentText, parentId = null }) =>
   supabaseRequest(COMMENTS_TABLE, {
     method: "POST",
+    accessToken: currentSession.access_token,
     headers: {
       Prefer: "return=minimal",
     },
     body: JSON.stringify({
       juego: gameId,
-      nombre: nameText,
+      user_id: currentSession.user.id,
+      nombre_publico: currentProfile.nombre_publico,
+      nombre: currentProfile.nombre_publico,
       comentario: commentText,
       parent_id: parentId,
     }),
@@ -126,16 +133,6 @@ const createReplyForm = (card, parentComment) => {
   form.hidden = true;
 
   form.innerHTML = `
-    <label>
-      Nombre
-      <input
-        name="name"
-        type="text"
-        maxlength="32"
-        placeholder="Tu nombre..."
-        required
-      />
-    </label>
     <label>
       Respuesta
       <textarea
@@ -153,11 +150,10 @@ const createReplyForm = (card, parentComment) => {
     event.preventDefault();
 
     const formData = new FormData(form);
-    const nameText = String(formData.get("name") || "").trim();
     const commentText = String(formData.get("comment") || "").trim();
     const submitButton = form.querySelector('button[type="submit"]');
 
-    if (!nameText || !commentText) {
+    if (!ensureCanComment() || !commentText) {
       return;
     }
 
@@ -167,7 +163,6 @@ const createReplyForm = (card, parentComment) => {
     try {
       await saveComment({
         gameId: card.dataset.game,
-        nameText,
         commentText,
         parentId: parentComment.id,
       });
@@ -193,7 +188,7 @@ const renderCommentItem = (card, comment, depth = 0) => {
 
   const author = document.createElement("strong");
   author.className = "comment-author";
-  author.textContent = comment.nombre || "Anonimo";
+  author.textContent = comment.nombre_publico || comment.nombre || "Anonimo";
 
   const text = document.createElement("p");
   text.textContent = comment.comentario;
@@ -230,7 +225,7 @@ const renderCommentItem = (card, comment, depth = 0) => {
 
   meta.append(date, actions);
 
-  if (isAdmin()) {
+  if (canDeleteComment(comment)) {
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.textContent = "Borrar";
@@ -304,12 +299,12 @@ const loadComments = async () => {
 
     try {
       comments = await supabaseRequest(
-        `${COMMENTS_TABLE}?select=id,parent_id,juego,nombre,comentario,likes,created_at&order=created_at.desc`,
+        `${COMMENTS_TABLE}?select=id,parent_id,user_id,juego,nombre,nombre_publico,comentario,likes,created_at&order=created_at.desc`,
       );
     } catch (error) {
       console.warn("No se pudo cargar parent_id, usando comentarios simples.", error);
       comments = await supabaseRequest(
-        `${COMMENTS_TABLE}?select=id,juego,nombre,comentario,likes,created_at&order=created_at.desc`,
+        `${COMMENTS_TABLE}?select=id,user_id,juego,nombre,nombre_publico,comentario,likes,created_at&order=created_at.desc`,
       );
     }
 
@@ -322,84 +317,172 @@ const loadComments = async () => {
   }
 };
 
-const updateAdminControls = () => {
-  const status = document.querySelector("[data-admin-status]");
-  const loginButton = document.querySelector("[data-admin-login]");
-  const logoutButton = document.querySelector("[data-admin-logout]");
+const loadProfile = async () => {
+  currentProfile = null;
+
+  if (!currentSession) {
+    return null;
+  }
+
+  const profiles = await supabaseRequest(
+    `profiles?select=id,email,nombre_publico&id=eq.${currentSession.user.id}&limit=1`,
+    {
+      accessToken: currentSession.access_token,
+    },
+  );
+
+  currentProfile = profiles[0] || null;
+  return currentProfile;
+};
+
+const updateUserControls = () => {
+  const status = document.querySelector("[data-user-status]");
+  const loginButton = document.querySelector("[data-user-login]");
+  const logoutButton = document.querySelector("[data-user-logout]");
+  const profileForm = document.querySelector("[data-profile-form]");
 
   if (!status || !loginButton || !logoutButton) {
     return;
   }
 
   if (!authClient) {
-    status.textContent = "Admin no disponible";
+    status.textContent = "Login no disponible";
     loginButton.hidden = true;
     logoutButton.hidden = true;
     return;
   }
 
-  if (isAdmin()) {
-    status.textContent = "Admin activo";
+  if (currentProfile) {
+    status.textContent = `Comentando como ${currentProfile.nombre_publico}`;
     loginButton.hidden = true;
     logoutButton.hidden = false;
+    if (profileForm) {
+      profileForm.hidden = true;
+    }
     return;
   }
 
-  status.textContent = currentSession ? "No autorizado" : "Modo admin inactivo";
+  if (currentSession) {
+    status.textContent = "Elegir nombre publico";
+    loginButton.hidden = true;
+    logoutButton.hidden = false;
+    if (profileForm) {
+      profileForm.hidden = false;
+    }
+    return;
+  }
+
+  status.textContent = "Entrar para comentar";
   loginButton.hidden = false;
   logoutButton.hidden = true;
+  if (profileForm) {
+    profileForm.hidden = true;
+  }
 };
 
-const setupAdminControls = () => {
-  const loginButton = document.querySelector("[data-admin-login]");
-  const logoutButton = document.querySelector("[data-admin-logout]");
+const setupUserControls = () => {
+  const loginButton = document.querySelector("[data-user-login]");
+  const logoutButton = document.querySelector("[data-user-logout]");
+  const profileForm = document.querySelector("[data-profile-form]");
 
   if (!authClient || !loginButton || !logoutButton) {
-    updateAdminControls();
+    updateUserControls();
     return;
   }
 
   loginButton.addEventListener("click", async () => {
+    const email = prompt("Ingresa tu email para recibir el link de acceso:");
+
+    if (!email) {
+      return;
+    }
+
     loginButton.disabled = true;
     loginButton.textContent = "Enviando...";
 
     const { error } = await authClient.auth.signInWithOtp({
-      email: ADMIN_EMAIL,
+      email: email.trim(),
       options: {
         emailRedirectTo: SITE_URL,
       },
     });
 
     loginButton.disabled = false;
-    loginButton.textContent = "Entrar admin";
+    loginButton.textContent = "Entrar";
 
     if (error) {
-      alert(`No se pudo enviar el acceso admin: ${error.message}`);
+      alert(`No se pudo enviar el acceso: ${error.message}`);
       return;
     }
 
-    alert("Te envie un link de acceso al email admin.");
+    alert("Te enviamos un link de acceso al email.");
   });
 
   logoutButton.addEventListener("click", async () => {
     await authClient.auth.signOut();
   });
+
+  profileForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    if (!currentSession) {
+      alert("Primero tenes que entrar con tu email.");
+      return;
+    }
+
+    const formData = new FormData(profileForm);
+    const publicName = String(formData.get("publicName") || "").trim();
+    const submitButton = profileForm.querySelector('button[type="submit"]');
+
+    if (!publicName) {
+      return;
+    }
+
+    submitButton.disabled = true;
+    submitButton.textContent = "Guardando...";
+
+    try {
+      await supabaseRequest("profiles", {
+        method: "POST",
+        accessToken: currentSession.access_token,
+        headers: {
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify({
+          id: currentSession.user.id,
+          email: currentSession.user.email,
+          nombre_publico: publicName,
+        }),
+      });
+      await loadProfile();
+      updateUserControls();
+      await loadComments();
+    } catch (error) {
+      console.error(error);
+      alert(`No se pudo guardar el nombre: ${error.message}`);
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = "Guardar nombre";
+    }
+  });
 };
 
 const initializeAuth = async () => {
   if (!authClient) {
-    updateAdminControls();
+    updateUserControls();
     await loadComments();
     return;
   }
 
   const { data } = await authClient.auth.getSession();
   currentSession = data.session;
-  updateAdminControls();
+  await loadProfile();
+  updateUserControls();
 
-  authClient.auth.onAuthStateChange((_event, session) => {
+  authClient.auth.onAuthStateChange(async (_event, session) => {
     currentSession = session;
-    updateAdminControls();
+    await loadProfile();
+    updateUserControls();
     loadComments();
   });
 
@@ -407,8 +490,8 @@ const initializeAuth = async () => {
 };
 
 const deleteComment = async (commentId) => {
-  if (!isAdmin()) {
-    alert("Tenes que entrar como admin para borrar comentarios.");
+  if (!currentSession) {
+    alert("Tenes que entrar para borrar comentarios.");
     return;
   }
 
@@ -466,10 +549,9 @@ const setupCommentForms = () => {
       event.preventDefault();
 
       const formData = new FormData(form);
-      const nameText = String(formData.get("name") || "").trim();
       const commentText = String(formData.get("comment") || "").trim();
 
-      if (!nameText || !commentText) {
+      if (!ensureCanComment() || !commentText) {
         return;
       }
 
@@ -479,7 +561,6 @@ const setupCommentForms = () => {
       try {
         await saveComment({
           gameId,
-          nameText,
           commentText,
         });
 
@@ -494,6 +575,20 @@ const setupCommentForms = () => {
       }
     });
   });
+};
+
+const ensureCanComment = () => {
+  if (!currentSession) {
+    alert("Primero tenes que entrar con tu email para comentar.");
+    return false;
+  }
+
+  if (!currentProfile) {
+    alert("Primero elegi tu nombre publico.");
+    return false;
+  }
+
+  return true;
 };
 
 const setupShareButton = () => {
@@ -532,6 +627,6 @@ const setupShareButton = () => {
 };
 
 setupCommentForms();
-setupAdminControls();
+setupUserControls();
 setupShareButton();
 initializeAuth();
